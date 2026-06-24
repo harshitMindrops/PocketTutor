@@ -1,4 +1,4 @@
-package com.example.pocket_tutor
+package com.harshit.pockettutor
 
 import io.flutter.embedding.android.FlutterActivity
 
