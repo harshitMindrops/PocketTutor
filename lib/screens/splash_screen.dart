@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pocket_tutor/screens/home_screen.dart';
 import 'package:pocket_tutor/screens/login_screen.dart';
-import 'package:pocket_tutor/utils/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SplashScreen extends StatefulWidget {
   SplashScreen({super.key});
@@ -11,21 +12,31 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  
+  StreamSubscription<User?>? _authSubscription;
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
-    final user = AuthService.instance.currentUser;
-    if(mounted) {
-      if (user != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
-    }
-    }
-  
+    // Listen to auth state changes to navigate when user is signed in
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted) return;
+      if (user != null && !_navigated) {
+        _navigated = true;
+        debugPrint('Auth state changed: navigating to HomeScreen');
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          (route) => false,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -36,17 +47,14 @@ class _SplashScreenState extends State<SplashScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0F172A),
-              Color(0xFF070B19),
-            ],
+            colors: [Color(0xFF0F172A), Color(0xFF070B19)],
           ),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [ 
+            children: [
               const SizedBox(height: 1),
 
               // Center Content: Logo, Title, Subtitle, and Badge
@@ -64,7 +72,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     ),
                     child: Image.asset(
                       "assets/images/logotrans.png",
-                      fit: BoxFit.contain
+                      fit: BoxFit.contain,
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -100,20 +108,13 @@ class _SplashScreenState extends State<SplashScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Colors.white24,
-                        width: 1,
-                      ),
+                      border: Border.all(color: Colors.white24, width: 1),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: const [
-                        Icon(
-                          Icons.bolt,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
+                        Icon(Icons.bolt, color: Colors.white70, size: 16),
                         SizedBox(width: 6),
                         Text(
                           'AI-POWERED LEARNING',
@@ -142,7 +143,9 @@ class _SplashScreenState extends State<SplashScreen> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const AuthScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => const AuthScreen(),
+                          ),
                         );
                       },
                       style: ElevatedButton.styleFrom(
@@ -164,17 +167,13 @@ class _SplashScreenState extends State<SplashScreen> {
                             ),
                           ),
                           SizedBox(width: 10),
-                          Icon(
-                            Icons.arrow_forward,
-                            size: 20,
-                          ),
+                          Icon(Icons.arrow_forward, size: 20),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                ]
+                ],
               ),
             ],
           ),

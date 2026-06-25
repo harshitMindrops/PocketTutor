@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:pocket_tutor/utils/models/user_model.dart';
 
 class AuthService {
@@ -13,24 +12,43 @@ class AuthService {
 
   User? get currentUser => _auth.currentUser;
 
-  Future<UserModel?> signInWithGoogle() async {
+  Future<UserModel?> signUpWithEmailAndPassword(
+    String email,
+    String password,
+    String name,
+  ) async {
     try {
-      // ✅ v7.x ka naya way
-      final GoogleSignInAccount? googleUser =
-          await GoogleSignIn.instance.authenticate();
+      final UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
+      final User? user = userCredential.user;
 
-      if (googleUser == null) return null;
+      if (user == null) return null;
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      // Update Firebase Auth user display name
+      await user.updateDisplayName(name);
 
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,  // ✅ v7 mein wapas aa gaya
-        idToken: googleAuth.idToken,
+      final userModel = UserModel(
+        uid: user.uid,
+        name: name,
+        email: email,
+        createdAt: DateTime.now().toIso8601String(),
       );
 
-      final UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
+      // Save user record to Firebase Database
+      await _database.ref('users/${user.uid}').set(userModel.toMap());
+      return userModel;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<UserModel?> signInWithEmailAndPassword(
+    String email,
+    String password,
+  ) async {
+    try {
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(email: email, password: password);
       final User? user = userCredential.user;
 
       if (user == null) return null;
@@ -60,7 +78,6 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
-      await GoogleSignIn.instance.signOut();
       await _auth.signOut();
     } catch (e) {
       rethrow;

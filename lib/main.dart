@@ -3,12 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:pocket_tutor/firebase_options.dart';
 import 'package:pocket_tutor/screens/splash_screen.dart';
 
-
-void main() async{
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(const MyApp());
 }
