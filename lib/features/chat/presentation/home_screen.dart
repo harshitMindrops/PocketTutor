@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:pocket_tutor/app/theme/app_colors.dart';
 import 'package:pocket_tutor/app/theme/app_decorations.dart';
@@ -45,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSending = false;
   bool _isOnline = true;
 
-  File? _selectedImage;
+  File? _selectedFile;
   final SpeechToText _speechToText = SpeechToText();
   String? _currentlySpeakingMessageId;
   bool _shouldSpeakNextResponse = false;
@@ -192,23 +193,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _sendMessage(String text) async {
-    if (text.trim().isEmpty && _selectedImage == null) return;
+    if (text.trim().isEmpty && _selectedFile == null) return;
     final user = AuthRepository.instance.currentUser;
     if (user == null) return;
 
     setState(() => _isSending = true);
     _messageController.clear();
-    final String? imagePath = _selectedImage?.path;
+    final String? imagePath = _selectedFile?.path;
     setState(() {
-      _selectedImage = null;
+      _selectedFile = null;
     });
 
     try {
       var chatId = _currentChatId;
       if (chatId == null) {
+        final ext = imagePath != null ? imagePath.split('.').last.toLowerCase() : '';
+        final isDoc = ext == 'pdf' || ext == 'docx' || ext == 'doc';
         final title = text.trim().isNotEmpty
             ? (text.length > 28 ? '${text.substring(0, 28)}...' : text.trim())
-            : "Image query";
+            : (isDoc ? "Document query" : "Image query");
         chatId = await _chatRepo.createChat(userId: user.uid, title: title);
         _selectChat(chatId);
       }
@@ -243,9 +246,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickAttachment() async {
     final picker = ImagePicker();
-    final XFile? image = await showModalBottomSheet<XFile?>(
+    final result = await showModalBottomSheet<dynamic>(
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
@@ -255,25 +258,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(
-                Icons.photo_library_outlined,
-                color: AppColors.primaryAccent,
-              ),
-              title: const Text(
-                'Choose from Gallery',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                final img = await picker.pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 1024,
-                  maxHeight: 1024,
-                  imageQuality: 80,
-                );
-                if (context.mounted) Navigator.pop(context, img);
-              },
-            ),
             ListTile(
               leading: const Icon(
                 Icons.camera_alt_outlined,
@@ -286,11 +270,52 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () async {
                 final img = await picker.pickImage(
                   source: ImageSource.camera,
-                  maxWidth: 1024,
-                  maxHeight: 1024,
-                  imageQuality: 80,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 70,
                 );
                 if (context.mounted) Navigator.pop(context, img);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.photo_library_outlined,
+                color: AppColors.primaryAccent,
+              ),
+              title: const Text(
+                'Choose from Gallery',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () async {
+                final img = await picker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 70,
+                );
+                if (context.mounted) Navigator.pop(context, img);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.insert_drive_file_outlined,
+                color: AppColors.primaryAccent,
+              ),
+              title: const Text(
+                'Choose Document (PDF, Word)',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () async {
+                try {
+                  final pickerResult = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['pdf', 'docx', 'doc'],
+                  );
+                  if (context.mounted) Navigator.pop(context, pickerResult);
+                } catch (e) {
+                  debugPrint('Error picking file: $e');
+                  if (context.mounted) Navigator.pop(context, null);
+                }
               },
             ),
           ],
@@ -298,10 +323,35 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    if (image != null) {
+    if (result == null) return;
+
+    if (result is XFile) {
       setState(() {
-        _selectedImage = File(image.path);
+        _selectedFile = File(result.path);
       });
+    } else if (result is FilePickerResult) {
+      if (result.files.single.path != null) {
+        final pickedFile = File(result.files.single.path!);
+        try {
+          final size = await pickedFile.length();
+          if (size > 5 * 1024 * 1024) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('File size stands more than 5MB. Please choose a smaller file to save tokens.'),
+                  backgroundColor: AppColors.error,
+                ),
+              );
+            }
+            return;
+          }
+        } catch (e) {
+          debugPrint('Error checking file size: $e');
+        }
+        setState(() {
+          _selectedFile = pickedFile;
+        });
+      }
     }
   }
 
@@ -591,7 +641,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
             ),
-            if (_selectedImage != null)
+            if (_selectedFile != null)
               Container(
                 margin: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
                 padding: const EdgeInsets.all(6),
@@ -605,18 +655,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        _selectedImage!,
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                      ),
+                      child: _buildSelectedFilePreview(_selectedFile!.path),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Image selected',
-                        style: TextStyle(
+                        _selectedFile!.path.split(Platform.isWindows ? '\\' : '/').last,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
                           color: AppColors.onSurface,
                           fontSize: 13,
                         ),
@@ -630,7 +677,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       onPressed: () {
                         setState(() {
-                          _selectedImage = null;
+                          _selectedFile = null;
                         });
                       },
                     ),
@@ -640,12 +687,41 @@ class _HomeScreenState extends State<HomeScreen> {
             ChatInputBar(
               controller: _messageController,
               onSend: _sendMessage,
-              onImagePick: _pickImage,
+              onAttachPick: _pickAttachment,
               onVoiceRecord: _startVoiceInput,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSelectedFilePreview(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    if (ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'webp' || ext == 'gif') {
+      return Image.file(
+        File(path),
+        width: 50,
+        height: 50,
+        fit: BoxFit.cover,
+      );
+    }
+
+    IconData iconData = Icons.insert_drive_file;
+    Color iconColor = Colors.grey;
+    if (ext == 'pdf') {
+      iconData = Icons.picture_as_pdf;
+      iconColor = Colors.redAccent;
+    } else if (ext == 'docx' || ext == 'doc') {
+      iconData = Icons.description;
+      iconColor = Colors.blue;
+    }
+
+    return Container(
+      width: 50,
+      height: 50,
+      color: AppColors.background,
+      child: Icon(iconData, color: iconColor, size: 28),
     );
   }
 }

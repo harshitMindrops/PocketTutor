@@ -49,6 +49,8 @@ class ChatRepository {
       () => StreamController<List<MessageModel>>.broadcast(),
     );
     _startMessagesSync(userId, chatId);
+    // Ensure any pending offline messages are processed now that we have a context.
+    _syncPendingIfOnline(userId);
     return _messageControllers[chatId]!.stream;
   }
 
@@ -239,9 +241,15 @@ class ChatRepository {
       }
     }
 
-    final displayMsgText = trimmedText.isEmpty && persistentImagePath != null
-        ? "Image query"
-        : trimmedText;
+    String displayMsgText = trimmedText;
+    if (trimmedText.isEmpty && persistentImagePath != null) {
+      final ext = persistentImagePath.split('.').last.toLowerCase();
+      if (ext == 'pdf' || ext == 'docx' || ext == 'doc') {
+        displayMsgText = "Document query";
+      } else {
+        displayMsgText = "Image query";
+      }
+    }
 
     await _hive.saveMessage(
       MessageModel(
@@ -290,9 +298,16 @@ class ChatRepository {
     required String localMessageId,
   }) async {
     var resolvedChatId = chatId;
-    final initialText = text.isEmpty && imagePath != null
-        ? "Image query"
-        : text;
+    String initialText = text;
+    if (text.isEmpty && imagePath != null) {
+      final ext = imagePath.split('.').last.toLowerCase();
+      if (ext == 'pdf' || ext == 'docx' || ext == 'doc') {
+        initialText = "Document query";
+      } else {
+        initialText = "Image query";
+      }
+    }
+
     if (chatId.startsWith('local_')) {
       resolvedChatId = await _uploadLocalChat(userId, chatId, initialText);
     }
@@ -302,13 +317,28 @@ class ChatRepository {
       await _hive.deleteMessage(userId, chatId, localMessageId);
     }
 
-    String? base64Image;
+    String? base64File;
     if (imagePath != null) {
       try {
         final file = File(imagePath);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
-          base64Image = base64.encode(bytes);
+          final ext = imagePath.split('.').last.toLowerCase();
+          String mimeType = 'image/jpeg';
+          if (ext == 'png') {
+            mimeType = 'image/png';
+          } else if (ext == 'webp') {
+            mimeType = 'image/webp';
+          } else if (ext == 'gif') {
+            mimeType = 'image/gif';
+          } else if (ext == 'pdf') {
+            mimeType = 'application/pdf';
+          } else if (ext == 'docx') {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          } else if (ext == 'doc') {
+            mimeType = 'application/msword';
+          }
+          base64File = 'data:$mimeType;base64,${base64.encode(bytes)}';
         }
       } catch (_) {}
     }
@@ -319,7 +349,7 @@ class ChatRepository {
     await msgRef.set({
       'sender': 'user',
       'text': initialText,
-      'imagePath': base64Image,
+      'imagePath': base64File,
       'timestamp': ServerValue.timestamp,
     });
 
@@ -344,7 +374,7 @@ class ChatRepository {
     }
 
     final File? fileToQuery = imagePath != null ? File(imagePath) : null;
-    final aiResponse = await _gemini.query(initialText, imageFile: fileToQuery);
+    final aiResponse = await _gemini.query(initialText, attachmentFile: fileToQuery);
     final aiMsgRef = _database
         .ref('users/$userId/chats/$resolvedChatId/messages')
         .push();

@@ -6,13 +6,13 @@ class ChatInputBar extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onSend,
-    required this.onImagePick,
+    required this.onAttachPick,
     required this.onVoiceRecord,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onSend;
-  final VoidCallback onImagePick;
+  final VoidCallback onAttachPick;
   final VoidCallback onVoiceRecord;
 
   @override
@@ -26,14 +26,14 @@ class ChatInputBar extends StatelessWidget {
       child: SafeArea(
         child: Row(
           children: [
-            // Image Upload Button (Left Side)
+            // Attachment Upload Button (Left Side)
             IconButton(
               icon: const Icon(
-                Icons.image_outlined,
+                Icons.attach_file_rounded,
                 color: AppColors.primary,
                 size: 24,
               ),
-              onPressed: onImagePick,
+              onPressed: onAttachPick,
               splashRadius: 24,
             ),
             const SizedBox(width: 4),

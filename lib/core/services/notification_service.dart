@@ -82,13 +82,17 @@ class NotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
       );
     } else {
+      // Determine interval from now to scheduledDate
+      final now = DateTime.now();
+      final diff = scheduledDate.difference(now);
+      final mode = diff.inMinutes < 5 ? AndroidScheduleMode.exact : AndroidScheduleMode.exactAllowWhileIdle;
       await _plugin.zonedSchedule(
         id,
         title,
         body,
         tzDate,
         _details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: mode,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
       );

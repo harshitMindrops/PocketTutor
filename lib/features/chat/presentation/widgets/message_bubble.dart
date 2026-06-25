@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:pocket_tutor/app/theme/app_colors.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path/path.dart' as p;
 
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
@@ -46,12 +48,9 @@ class MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Image Preview (if present)
+            // Attachment Preview (if present)
             if (imagePath != null && imagePath!.isNotEmpty) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _buildImageWidget(imagePath!),
-              ),
+              _buildAttachmentWidget(context, imagePath!),
               const SizedBox(height: 8),
             ],
             // Text and Speaker Row
@@ -94,6 +93,121 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
+  Widget _buildAttachmentWidget(BuildContext context, String path) {
+    final isLocalFile =
+        path.startsWith('/') ||
+        path.startsWith('C:') ||
+        path.contains('\\') ||
+        path.startsWith('file://');
+
+    String extension = '.jpg';
+    String fileName = '';
+
+    if (isLocalFile) {
+      extension = p.extension(path).toLowerCase();
+      fileName = p.basename(path);
+    } else {
+      // It is a base64 string
+      if (path.startsWith('data:')) {
+        final match = RegExp(r'^data:(.*?);base64,').firstMatch(path);
+        if (match != null) {
+          final mimeType = match.group(1) ?? '';
+          if (mimeType == 'application/pdf') {
+            extension = '.pdf';
+          } else if (mimeType.contains('word') || mimeType.contains('msword') || mimeType.contains('officedocument')) {
+            extension = '.docx';
+          } else if (mimeType == 'image/png') {
+            extension = '.png';
+          } else if (mimeType == 'image/webp') {
+            extension = '.webp';
+          } else if (mimeType == 'image/gif') {
+            extension = '.gif';
+          }
+          fileName = 'Document$extension';
+        }
+      }
+    }
+
+    final isImage = extension == '.jpg' || extension == '.jpeg' || extension == '.png' || extension == '.webp' || extension == '.gif';
+
+    if (isImage) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: _buildImageWidget(path),
+      );
+    }
+
+    // It is a PDF or Word document! Build a beautiful attachment card.
+    IconData iconData = Icons.insert_drive_file;
+    Color iconColor = Colors.grey;
+    if (extension == '.pdf') {
+      iconData = Icons.picture_as_pdf;
+      iconColor = Colors.redAccent;
+    } else if (extension == '.docx' || extension == '.doc') {
+      iconData = Icons.description;
+      iconColor = Colors.blue;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.background.withAlpha(128),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(iconData, color: iconColor, size: 32),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fileName.isNotEmpty ? fileName : 'Attachment File',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  extension.replaceAll('.', '').toUpperCase(),
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isLocalFile) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.open_in_new_rounded, color: AppColors.primaryAccent, size: 20),
+              onPressed: () async {
+                try {
+                  await OpenFilex.open(path);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not open file: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildImageWidget(String path) {
     final isLocalFile =
         path.startsWith('/') ||
@@ -121,7 +235,14 @@ class MessageBubble extends StatelessWidget {
     } else {
       // Decode base64
       try {
-        final decodedBytes = base64Decode(path);
+        String base64Data = path;
+        if (path.startsWith('data:')) {
+          final match = RegExp(r'^data:(.*?);base64,(.*)$').firstMatch(path);
+          if (match != null) {
+            base64Data = match.group(2) ?? '';
+          }
+        }
+        final decodedBytes = base64Decode(base64Data);
         return Image.memory(
           decodedBytes,
           fit: BoxFit.cover,
