@@ -114,6 +114,13 @@ class HiveService {
         message,
       );
 
+  MessageModel? getMessage(
+    String userId,
+    String chatId,
+    String messageId,
+  ) =>
+      _messagesBox.get(_messageKey(userId, chatId, messageId));
+
   /// Deletes a single message from Hive and returns its local image path (if
   /// any) so the caller can decide whether to delete the file from disk.
   Future<String?> deleteMessage(

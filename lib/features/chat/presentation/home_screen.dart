@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:pocket_tutor/app/theme/app_colors.dart';
-import 'package:pocket_tutor/app/theme/app_decorations.dart';
+
 import 'package:pocket_tutor/core/constants/app_strings.dart';
 import 'package:pocket_tutor/core/navigation/app_routes.dart';
 import 'package:pocket_tutor/core/network/connectivity_service.dart';
@@ -22,7 +22,6 @@ import 'package:pocket_tutor/features/chat/presentation/widgets/message_bubble.d
 import 'package:pocket_tutor/features/chat/presentation/widgets/offline_banner.dart';
 import 'package:pocket_tutor/features/chat/presentation/widgets/typing_indicator.dart';
 import 'package:pocket_tutor/features/reminders/presentation/reminder_sheet.dart';
-import 'package:pocket_tutor/shared/widgets/connection_status_badge.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -207,7 +206,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       var chatId = _currentChatId;
       if (chatId == null) {
-        final ext = imagePath != null ? imagePath.split('.').last.toLowerCase() : '';
+        final ext = imagePath != null
+            ? imagePath.split('.').last.toLowerCase()
+            : '';
         final isDoc = ext == 'pdf' || ext == 'docx' || ext == 'doc';
         final title = text.trim().isNotEmpty
             ? (text.length > 28 ? '${text.substring(0, 28)}...' : text.trim())
@@ -250,75 +251,87 @@ class _HomeScreenState extends State<HomeScreen> {
     final picker = ImagePicker();
     final result = await showModalBottomSheet<dynamic>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(
-                Icons.camera_alt_outlined,
-                color: AppColors.primaryAccent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-              title: const Text(
-                'Take a Photo',
-                style: TextStyle(color: Colors.white),
+              const SizedBox(height: 16),
+              const Text(
+                'Add Attachment',
+                style: TextStyle(
+                  color: AppColors.onPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
-              onTap: () async {
-                final img = await picker.pickImage(
-                  source: ImageSource.camera,
-                  maxWidth: 800,
-                  maxHeight: 800,
-                  imageQuality: 70,
-                );
-                if (context.mounted) Navigator.pop(context, img);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.photo_library_outlined,
-                color: AppColors.primaryAccent,
-              ),
-              title: const Text(
-                'Choose from Gallery',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                final img = await picker.pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 800,
-                  maxHeight: 800,
-                  imageQuality: 70,
-                );
-                if (context.mounted) Navigator.pop(context, img);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.insert_drive_file_outlined,
-                color: AppColors.primaryAccent,
-              ),
-              title: const Text(
-                'Choose Document (PDF, Word)',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: () async {
-                try {
-                  final pickerResult = await FilePicker.platform.pickFiles(
-                    type: FileType.custom,
-                    allowedExtensions: ['pdf', 'docx', 'doc'],
+              const SizedBox(height: 8),
+              _AttachOption(
+                emoji: '📷',
+                label: 'Take a Photo',
+                color: AppColors.primary,
+                onTap: () async {
+                  final img = await picker.pickImage(
+                    source: ImageSource.camera,
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    imageQuality: 70,
                   );
-                  if (context.mounted) Navigator.pop(context, pickerResult);
-                } catch (e) {
-                  debugPrint('Error picking file: $e');
-                  if (context.mounted) Navigator.pop(context, null);
-                }
-              },
-            ),
-          ],
+                  if (context.mounted) Navigator.pop(context, img);
+                },
+              ),
+              _AttachOption(
+                emoji: '🖼️',
+                label: 'Choose from Gallery',
+                color: AppColors.secondary,
+                onTap: () async {
+                  final img = await picker.pickImage(
+                    source: ImageSource.gallery,
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    imageQuality: 70,
+                  );
+                  if (context.mounted) Navigator.pop(context, img);
+                },
+              ),
+              _AttachOption(
+                emoji: '📄',
+                label: 'Choose Document (PDF / Word)',
+                color: AppColors.offline,
+                onTap: () async {
+                  try {
+                    final pickerResult = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: ['pdf', 'docx', 'doc'],
+                    );
+                    if (context.mounted) Navigator.pop(context, pickerResult);
+                  } catch (e) {
+                    debugPrint('Error picking file: \$e');
+                    if (context.mounted) Navigator.pop(context, null);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -338,7 +351,9 @@ class _HomeScreenState extends State<HomeScreen> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('File size stands more than 5MB. Please choose a smaller file to save tokens.'),
+                  content: Text(
+                    'File size stands more than 5MB. Please choose a smaller file to save tokens.',
+                  ),
                   backgroundColor: AppColors.error,
                 ),
               );
@@ -551,40 +566,82 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_open_rounded, size: 28),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            border: Border(
+              bottom: BorderSide(
+                color: AppColors.glassBorder.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  Builder(
+                    builder: (ctx) => IconButton(
+                      icon: const Icon(
+                        Icons.menu_rounded,
+                        color: AppColors.onSurface,
+                        size: 26,
+                      ),
+                      onPressed: () => Scaffold.of(ctx).openDrawer(),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Gradient title
+                  ShaderMask(
+                    shaderCallback: (bounds) =>
+                        AppColors.heroGradient.createShader(bounds),
+                    child: const Text(
+                      'PocketTutor',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Online dot
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 400),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isOnline ? AppColors.online : AppColors.offline,
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              (_isOnline ? AppColors.online : AppColors.offline)
+                                  .withValues(alpha: 0.6),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  // Reminder bell
+                  _AppBarBtn(
+                    icon: Icons.notifications_outlined,
+                    onTap: () => showReminderSheet(context),
+                  ),
+                  _AppBarBtn(
+                    icon: Icons.settings_outlined,
+                    onTap: () => AppRoutes.openSettings(context),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              ),
+            ),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              AppStrings.appName,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            ConnectionStatusBadge(isOnline: _isOnline),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Study Reminders',
-            icon: const Icon(
-              Icons.notifications_outlined,
-              color: AppColors.onSurface,
-            ),
-            onPressed: () => showReminderSheet(context),
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.settings_outlined,
-              color: AppColors.onSurface,
-            ),
-            onPressed: () => AppRoutes.openSettings(context),
-          ),
-        ],
       ),
       drawer: ChatDrawer(
         userName: _userName,
@@ -598,9 +655,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onLogout: _logout,
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: AppDecorations.backgroundGradient,
-        ),
+        decoration: const BoxDecoration(gradient: AppColors.meshGradient),
         child: Column(
           children: [
             if (!_isOnline) const OfflineBanner(),
@@ -643,12 +698,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             if (_selectedFile != null)
               Container(
-                margin: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-                padding: const EdgeInsets.all(6),
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.primaryLight.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -660,7 +717,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        _selectedFile!.path.split(Platform.isWindows ? '\\' : '/').last,
+                        _selectedFile!.path
+                            .split(Platform.isWindows ? '\\' : '/')
+                            .last,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -698,30 +757,119 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSelectedFilePreview(String path) {
     final ext = path.split('.').last.toLowerCase();
-    if (ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'webp' || ext == 'gif') {
-      return Image.file(
-        File(path),
-        width: 50,
-        height: 50,
-        fit: BoxFit.cover,
-      );
+    if (ext == 'jpg' ||
+        ext == 'jpeg' ||
+        ext == 'png' ||
+        ext == 'webp' ||
+        ext == 'gif') {
+      return Image.file(File(path), width: 50, height: 50, fit: BoxFit.cover);
     }
 
-    IconData iconData = Icons.insert_drive_file;
-    Color iconColor = Colors.grey;
+    IconData iconData = Icons.insert_drive_file_rounded;
+    Color iconColor = AppColors.onSurfaceMuted;
     if (ext == 'pdf') {
-      iconData = Icons.picture_as_pdf;
-      iconColor = Colors.redAccent;
+      iconData = Icons.picture_as_pdf_rounded;
+      iconColor = const Color(0xFFFF4757);
     } else if (ext == 'docx' || ext == 'doc') {
-      iconData = Icons.description;
-      iconColor = Colors.blue;
+      iconData = Icons.description_rounded;
+      iconColor = AppColors.secondary;
     }
 
     return Container(
       width: 50,
       height: 50,
-      color: AppColors.background,
-      child: Icon(iconData, color: iconColor, size: 28),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(iconData, color: iconColor, size: 26),
+    );
+  }
+}
+
+// ── Helper: AppBar icon button ────────────────────────────────────────────────
+class _AppBarBtn extends StatefulWidget {
+  const _AppBarBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  State<_AppBarBtn> createState() => _AppBarBtnState();
+}
+
+class _AppBarBtnState extends State<_AppBarBtn> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 40,
+        height: 40,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: _pressed
+              ? AppColors.primaryLight.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          widget.icon,
+          color: _pressed ? AppColors.primaryLight : AppColors.onSurface,
+          size: 22,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Helper: Attachment option tile ───────────────────────────────────────────
+class _AttachOption extends StatelessWidget {
+  const _AttachOption({
+    required this.emoji,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 20))),
+      ),
+      title: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: const Icon(
+        Icons.arrow_forward_ios_rounded,
+        size: 14,
+        color: AppColors.onSurfaceMuted,
+      ),
     );
   }
 }

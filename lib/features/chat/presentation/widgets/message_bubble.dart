@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pocket_tutor/app/theme/app_colors.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   const MessageBubble({
     super.key,
     required this.text,
@@ -24,78 +25,266 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onSpeakToggled;
 
   @override
-  Widget build(BuildContext context) {
-    final isSpeaking = messageId != null && currentlySpeakingId == messageId;
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
 
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isUser ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: isUser ? const Radius.circular(18) : Radius.zero,
-            bottomRight: isUser ? Radius.zero : const Radius.circular(18),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Attachment Preview (if present)
-            if (imagePath != null && imagePath!.isNotEmpty) ...[
-              _buildAttachmentWidget(context, imagePath!),
-              const SizedBox(height: 8),
-            ],
-            // Text and Speaker Row
-            Row(
+class _MessageBubbleState extends State<MessageBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+  late final Animation<double> _fade;
+
+  Uint8List? _cachedBytes;
+  String? _lastDecodedPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
+    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
+    _ctrl.forward();
+    _decodeImageIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(MessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.imagePath != oldWidget.imagePath) {
+      _decodeImageIfNeeded();
+    }
+  }
+
+  void _decodeImageIfNeeded() {
+    final path = widget.imagePath;
+    if (path == null || path.isEmpty) {
+      _cachedBytes = null;
+      _lastDecodedPath = null;
+      return;
+    }
+    if (path == _lastDecodedPath) return;
+
+    final isLocalFile = path.startsWith('/') ||
+        path.startsWith('C:') ||
+        path.contains('\\') ||
+        path.startsWith('file://');
+
+    if (!isLocalFile && (path.startsWith('data:') || path.length >= 100)) {
+      try {
+        String base64Data = path;
+        if (path.startsWith('data:')) {
+          final match = RegExp(r'^data:(.*?);base64,(.*)$').firstMatch(path);
+          if (match != null) base64Data = match.group(2) ?? '';
+        }
+        _cachedBytes = base64Decode(base64Data);
+        _lastDecodedPath = path;
+      } catch (_) {
+        _cachedBytes = null;
+        _lastDecodedPath = null;
+      }
+    } else {
+      _cachedBytes = null;
+      _lastDecodedPath = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSpeaking =
+        widget.messageId != null && widget.currentlySpeakingId == widget.messageId;
+    final isUser = widget.isUser;
+
+    return FadeTransition(
+      opacity: _fade,
+      child: ScaleTransition(
+        scale: _scale,
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Align(
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+            ),
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Expanded(
-                  child: Text(
-                    text,
-                    style: const TextStyle(
-                      color: AppColors.onPrimary,
-                      fontSize: 15,
-                      height: 1.4,
+                // AI avatar — left side
+                if (!isUser) ...[
+                  Container(
+                    width: 30,
+                    height: 30,
+                    margin: const EdgeInsets.only(right: 8, bottom: 2),
+                    decoration: const BoxDecoration(
+                      gradient: AppColors.heroGradient,
+                      shape: BoxShape.circle,
                     ),
-                  ),
-                ),
-                if (onSpeakToggled != null) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(
-                      isSpeaking
-                          ? Icons.volume_off_rounded
-                          : Icons.volume_up_rounded,
-                      color: isSpeaking
-                          ? AppColors.primaryAccent
-                          : AppColors.onSurface,
-                      size: 20,
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      size: 14,
+                      color: Colors.white,
                     ),
-                    onPressed: onSpeakToggled,
-                    constraints: const BoxConstraints(),
-                    padding: EdgeInsets.zero,
                   ),
                 ],
+
+                // Bubble
+                Flexible(
+                  child: _buildBubble(context, isUser, isSpeaking),
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildBubble(BuildContext context, bool isUser, bool isSpeaking) {
+    if (isUser) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: AppColors.userBubbleGradient,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(4),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: _bubbleContent(context, isUser, isSpeaking),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+          border: Border.all(
+            color: AppColors.primaryLight.withValues(alpha: 0.15),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: _bubbleContent(context, isUser, isSpeaking),
+      );
+    }
+  }
+
+  Widget _bubbleContent(BuildContext context, bool isUser, bool isSpeaking) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Attachment preview
+        if (widget.imagePath != null && widget.imagePath!.isNotEmpty) ...[
+          _buildAttachmentWidget(context, widget.imagePath!),
+          const SizedBox(height: 8),
+        ],
+        // Text + action row
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Flexible(
+              child: SelectableText(
+                widget.text,
+                style: TextStyle(
+                  color: isUser
+                      ? Colors.white
+                      : AppColors.onSurface,
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+              ),
+            ),
+            if (!isUser && widget.onSpeakToggled != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: widget.onSpeakToggled,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isSpeaking
+                        ? AppColors.primaryLight.withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isSpeaking
+                        ? Icons.volume_off_rounded
+                        : Icons.volume_up_rounded,
+                    size: 17,
+                    color: isSpeaking
+                        ? AppColors.primaryLight
+                        : AppColors.onSurfaceMuted,
+                  ),
+                ),
+              ),
+            ],
+            if (!isUser) ...[
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: widget.text));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Copied ✓'),
+                      backgroundColor: AppColors.surface,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  );
+                },
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.copy_rounded,
+                    size: 15,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildAttachmentWidget(BuildContext context, String path) {
-    final isLocalFile =
-        path.startsWith('/') ||
+    final isLocalFile = path.startsWith('/') ||
         path.startsWith('C:') ||
         path.contains('\\') ||
         path.startsWith('file://');
@@ -106,91 +295,93 @@ class MessageBubble extends StatelessWidget {
     if (isLocalFile) {
       extension = p.extension(path).toLowerCase();
       fileName = p.basename(path);
-    } else {
-      // It is a base64 string
-      if (path.startsWith('data:')) {
-        final match = RegExp(r'^data:(.*?);base64,').firstMatch(path);
-        if (match != null) {
-          final mimeType = match.group(1) ?? '';
-          if (mimeType == 'application/pdf') {
-            extension = '.pdf';
-          } else if (mimeType.contains('word') || mimeType.contains('msword') || mimeType.contains('officedocument')) {
-            extension = '.docx';
-          } else if (mimeType == 'image/png') {
-            extension = '.png';
-          } else if (mimeType == 'image/webp') {
-            extension = '.webp';
-          } else if (mimeType == 'image/gif') {
-            extension = '.gif';
-          }
-          fileName = 'Document$extension';
+    } else if (path.startsWith('data:')) {
+      final match = RegExp(r'^data:(.*?);base64,').firstMatch(path);
+      if (match != null) {
+        final mimeType = match.group(1) ?? '';
+        if (mimeType == 'application/pdf') {
+          extension = '.pdf';
+        } else if (mimeType.contains('word') ||
+            mimeType.contains('msword') ||
+            mimeType.contains('officedocument')) {
+          extension = '.docx';
+        } else if (mimeType == 'image/png') {
+          extension = '.png';
+        } else if (mimeType == 'image/webp') {
+          extension = '.webp';
+        } else if (mimeType == 'image/gif') {
+          extension = '.gif';
         }
+        fileName = 'Document$extension';
       }
     }
 
-    final isImage = extension == '.jpg' || extension == '.jpeg' || extension == '.png' || extension == '.webp' || extension == '.gif';
+    final isImage = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].contains(extension);
 
     if (isImage) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: _buildImageWidget(path),
       );
     }
 
-    // It is a PDF or Word document! Build a beautiful attachment card.
-    IconData iconData = Icons.insert_drive_file;
-    Color iconColor = Colors.grey;
+    // Document card
+    IconData iconData = Icons.insert_drive_file_rounded;
+    Color iconColor = AppColors.onSurfaceMuted;
+    Color iconBg = AppColors.surfaceMuted;
     if (extension == '.pdf') {
-      iconData = Icons.picture_as_pdf;
-      iconColor = Colors.redAccent;
+      iconData = Icons.picture_as_pdf_rounded;
+      iconColor = const Color(0xFFFF4757);
+      iconBg = const Color(0xFF2A1020);
     } else if (extension == '.docx' || extension == '.doc') {
-      iconData = Icons.description;
-      iconColor = Colors.blue;
+      iconData = Icons.description_rounded;
+      iconColor = const Color(0xFF06B6D4);
+      iconBg = const Color(0xFF0A2030);
     }
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.background.withAlpha(128),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.background.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: iconColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(iconData, color: iconColor, size: 32),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
+            child: Icon(iconData, color: iconColor, size: 22),
+          ),
           const SizedBox(width: 12),
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  fileName.isNotEmpty ? fileName : 'Attachment File',
+                  fileName.isNotEmpty ? fileName : 'Attachment',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   extension.replaceAll('.', '').toUpperCase(),
-                  style: const TextStyle(
-                    color: AppColors.onSurfaceMuted,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: iconColor, fontSize: 11),
                 ),
               ],
             ),
           ),
           if (isLocalFile) ...[
             const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.open_in_new_rounded, color: AppColors.primaryAccent, size: 20),
-              onPressed: () async {
+            GestureDetector(
+              onTap: () async {
                 try {
                   await OpenFilex.open(path);
                 } catch (e) {
@@ -201,6 +392,7 @@ class MessageBubble extends StatelessWidget {
                   }
                 }
               },
+              child: Icon(Icons.open_in_new_rounded, color: iconColor, size: 18),
             ),
           ],
         ],
@@ -209,63 +401,37 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImageWidget(String path) {
-    final isLocalFile =
-        path.startsWith('/') ||
+    final isLocalFile = path.startsWith('/') ||
         path.startsWith('C:') ||
         path.contains('\\') ||
         path.startsWith('file://');
 
+    Widget img;
     if (isLocalFile) {
-      final file = File(path);
-      return Image.file(
-        file,
+      img = Image.file(
+        File(path),
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            color: AppColors.background,
-            height: 150,
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.broken_image_rounded,
-              color: AppColors.error,
-            ),
-          );
-        },
+        errorBuilder: (_, e, s) => _brokenImage(),
+      );
+    } else if (_cachedBytes != null) {
+      img = Image.memory(
+        _cachedBytes!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, e, s) => _brokenImage(),
       );
     } else {
-      // Decode base64
-      try {
-        String base64Data = path;
-        if (path.startsWith('data:')) {
-          final match = RegExp(r'^data:(.*?);base64,(.*)$').firstMatch(path);
-          if (match != null) {
-            base64Data = match.group(2) ?? '';
-          }
-        }
-        final decodedBytes = base64Decode(base64Data);
-        return Image.memory(
-          decodedBytes,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: AppColors.background,
-              height: 150,
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.broken_image_rounded,
-                color: AppColors.error,
-              ),
-            );
-          },
-        );
-      } catch (_) {
-        return Container(
-          color: AppColors.background,
-          height: 150,
-          alignment: Alignment.center,
-          child: const Icon(Icons.broken_image_rounded, color: AppColors.error),
-        );
-      }
+      img = _brokenImage();
     }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 220),
+      child: img,
+    );
   }
+
+  Widget _brokenImage() => Container(
+        height: 120,
+        color: AppColors.background,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image_rounded, color: AppColors.error),
+      );
 }

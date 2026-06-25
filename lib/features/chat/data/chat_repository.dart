@@ -144,12 +144,7 @@ class ChatRepository {
 
               // --- Offline image persistence ---
               // Check if Hive already has this message with a valid local file.
-              final existing = _hive.getMessagesForChat(userId, chatId)
-                  .cast<MessageModel?>()
-                  .firstWhere(
-                    (m) => m?.id == messageId,
-                    orElse: () => null,
-                  );
+              final existing = _hive.getMessage(userId, chatId, messageId);
 
               String? resolvedImagePath = rawMsg.imagePath;
 
