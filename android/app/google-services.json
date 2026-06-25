@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "676982091817",
+    "firebase_url": "https://pockettutor-f9bfb-default-rtdb.firebaseio.com",
+    "project_id": "pockettutor-f9bfb",
+    "storage_bucket": "pockettutor-f9bfb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:676982091817:android:1602a75040cf922c856c38",
+        "android_client_info": {
+          "package_name": "com.harshit.pockettutor"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "676982091817-nrcj93feruloh0lqjmfflvaj6sc3l2ua.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.harshit.pockettutor",
+            "certificate_hash": "2d37a3fbb5ba9ba2d796688f81e3b5e4e67bd2cf"
+          }
+        },
+        {
+          "client_id": "676982091817-nuqg37h3u9t125k1imtbdmijfjoased4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2lAbEgwcFGEr_85aTkX0MJyWjrN2VD-c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "676982091817-nuqg37h3u9t125k1imtbdmijfjoased4.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "676982091817-t9rkoemqkl05a1qje2mquvgek5udu6a5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.harshit.pockettutor"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
