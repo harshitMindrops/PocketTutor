@@ -48,9 +48,10 @@ class _ChatEmptyStateState extends State<ChatEmptyState>
       duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
 
-    _logoFloat = Tween<double>(begin: -6, end: 6).animate(
-      CurvedAnimation(parent: _logoCtrl, curve: Curves.easeInOut),
-    );
+    _logoFloat = Tween<double>(
+      begin: -6,
+      end: 6,
+    ).animate(CurvedAnimation(parent: _logoCtrl, curve: Curves.easeInOut));
 
     _cardCtrls = List.generate(
       _prompts.length,
@@ -106,11 +107,7 @@ class _ChatEmptyStateState extends State<ChatEmptyState>
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.auto_awesome,
-                size: 48,
-                color: Colors.white,
-              ),
+              child: Image.asset("assets/images/logo.png", fit: BoxFit.fill),
             ),
           ),
 
@@ -118,7 +115,8 @@ class _ChatEmptyStateState extends State<ChatEmptyState>
 
           // Greeting
           ShaderMask(
-            shaderCallback: (bounds) => AppColors.heroGradient.createShader(bounds),
+            shaderCallback: (bounds) =>
+                AppColors.heroGradient.createShader(bounds),
             child: const Text(
               "What's the vibe today? 🧠",
               textAlign: TextAlign.center,
@@ -136,10 +134,7 @@ class _ChatEmptyStateState extends State<ChatEmptyState>
           const Text(
             'Pick a prompt or type your question below',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.onSurfaceMuted,
-            ),
+            style: TextStyle(fontSize: 14, color: AppColors.onSurfaceMuted),
           ),
 
           const SizedBox(height: 36),
@@ -222,7 +217,9 @@ class _PromptCardState extends State<_PromptCard> {
             ),
             boxShadow: [
               BoxShadow(
-                color: widget.accentColor.withValues(alpha: _pressed ? 0.2 : 0.07),
+                color: widget.accentColor.withValues(
+                  alpha: _pressed ? 0.2 : 0.07,
+                ),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
@@ -238,7 +235,10 @@ class _PromptCardState extends State<_PromptCard> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
-                  child: Text(widget.icon, style: const TextStyle(fontSize: 20)),
+                  child: Text(
+                    widget.icon,
+                    style: const TextStyle(fontSize: 20),
+                  ),
                 ),
               ),
               const SizedBox(width: 14),

@@ -9,6 +9,7 @@ import 'package:pocket_tutor/app/theme/app_colors.dart';
 
 import 'package:pocket_tutor/core/constants/app_strings.dart';
 import 'package:pocket_tutor/core/navigation/app_routes.dart';
+import 'package:pocket_tutor/core/navigation/chat_launch_action.dart';
 import 'package:pocket_tutor/core/network/connectivity_service.dart';
 import 'package:pocket_tutor/core/services/tts_service.dart';
 import 'package:pocket_tutor/features/auth/data/auth_repository.dart';
@@ -24,13 +25,21 @@ import 'package:pocket_tutor/features/chat/presentation/widgets/typing_indicator
 import 'package:pocket_tutor/features/reminders/presentation/reminder_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.initialChatId,
+    this.launchAction = ChatLaunchAction.none,
+  });
+
+  final String? initialChatId;
+  final ChatLaunchAction launchAction;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _chatRepo = ChatRepository.instance;
   final _connectivity = ConnectivityService.instance;
   final _messageController = TextEditingController();
@@ -66,6 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _loadUser();
     _loadChats();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _handleLaunchIntent();
+    });
 
     TtsService.instance.onSpeakStateChanged = (msgId) {
       if (mounted) {
@@ -162,6 +176,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() => _messages = messages);
       _scrollToBottom();
+    });
+  }
+
+  void _handleLaunchIntent() {
+    if (widget.initialChatId != null) {
+      _selectChat(widget.initialChatId!);
+      return;
+    }
+
+    if (widget.launchAction != ChatLaunchAction.none) {
+      _startNewChat();
+    }
+
+    switch (widget.launchAction) {
+      case ChatLaunchAction.attachment:
+        _pickAttachment();
+      case ChatLaunchAction.voice:
+        _startVoiceInput();
+      case ChatLaunchAction.openDrawer:
+        _openDrawer();
+      case ChatLaunchAction.none:
+        break;
+    }
+  }
+
+  void _openDrawer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scaffoldKey.currentState?.openDrawer();
     });
   }
 
@@ -565,6 +608,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.background,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),

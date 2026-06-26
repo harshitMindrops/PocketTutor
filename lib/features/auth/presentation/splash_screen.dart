@@ -216,10 +216,9 @@ class _SplashScreenState extends State<SplashScreen>
                                   ),
                                 ],
                               ),
-                              child: const Icon(
-                                Icons.auto_awesome,
-                                size: 54,
-                                color: Colors.white,
+                              child: Image.asset(
+                                "assets/images/logo.png",
+                                fit: BoxFit.fill
                               ),
                             ),
                           ],
