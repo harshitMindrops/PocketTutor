@@ -92,13 +92,16 @@ class MessageModelAdapter extends TypeAdapter<MessageModel> {
       imagePath: fields[7] as String?,
       timestamp: fields[5] as int,
       synced: fields[6] as bool? ?? true,
+      toolTag: fields[8] as String?,
+      flashcardQuestion: fields[9] as String?,
+      flashcardAnswer: fields[10] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, MessageModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -114,7 +117,13 @@ class MessageModelAdapter extends TypeAdapter<MessageModel> {
       ..writeByte(6)
       ..write(obj.synced)
       ..writeByte(7)
-      ..write(obj.imagePath);
+      ..write(obj.imagePath)
+      ..writeByte(8)
+      ..write(obj.toolTag)
+      ..writeByte(9)
+      ..write(obj.flashcardQuestion)
+      ..writeByte(10)
+      ..write(obj.flashcardAnswer);
   }
 }
 
@@ -137,13 +146,14 @@ class PendingSyncItemAdapter extends TypeAdapter<PendingSyncItem> {
       messageId: fields[5] as String?,
       createdAt: fields[6] as int,
       imagePath: fields[7] as String?,
+      toolTag: fields[8] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PendingSyncItem obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -159,6 +169,8 @@ class PendingSyncItemAdapter extends TypeAdapter<PendingSyncItem> {
       ..writeByte(6)
       ..write(obj.createdAt)
       ..writeByte(7)
-      ..write(obj.imagePath);
+      ..write(obj.imagePath)
+      ..writeByte(8)
+      ..write(obj.toolTag);
   }
 }

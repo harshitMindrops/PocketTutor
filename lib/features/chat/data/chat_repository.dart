@@ -8,8 +8,11 @@ import 'package:pocket_tutor/core/services/image_storage_service.dart';
 import 'package:pocket_tutor/core/storage/hive_service.dart';
 import 'package:pocket_tutor/features/chat/data/gemini_service.dart';
 import 'package:pocket_tutor/features/chat/data/models/chat_model.dart';
+import 'package:pocket_tutor/features/chat/data/models/chat_tool_type.dart';
 import 'package:pocket_tutor/features/chat/data/models/message_model.dart';
 import 'package:pocket_tutor/features/chat/data/models/pending_sync_item.dart';
+import 'package:pocket_tutor/features/chat/presentation/widgets/quiz.dart'
+    show QuizQuestion;
 
 class ChatRepository {
   ChatRepository._();
@@ -28,7 +31,9 @@ class ChatRepository {
       {};
 
   StreamSubscription<DatabaseEvent>? _chatsSubscription;
-  StreamSubscription<DatabaseEvent>? _messagesSubscription;
+  final Map<String, StreamSubscription<DatabaseEvent>> _messagesSubscriptions =
+      {};
+
   StreamSubscription<bool>? _connectivitySubscription;
 
   String? _activeUserId;
@@ -123,8 +128,8 @@ class ChatRepository {
     Future.microtask(() => _emitMessages(userId, chatId));
     if (!_connectivity.isOnline) return;
 
-    _messagesSubscription?.cancel();
-    _messagesSubscription = _database
+    _messagesSubscriptions[chatId]?.cancel();
+    _messagesSubscriptions[chatId] = _database
         .ref('users/$userId/chats/$chatId/messages')
         .orderByChild('timestamp')
         .onValue
@@ -163,7 +168,16 @@ class ChatRepository {
               }
 
               await _hive.saveMessage(
-                rawMsg.copyWith(imagePath: resolvedImagePath),
+                rawMsg.copyWith(
+                  imagePath: resolvedImagePath,
+                  toolTag: rawMsg.toolTag ?? existing?.toolTag,
+                  flashcardQuestion:
+                      rawMsg.flashcardQuestion ?? existing?.flashcardQuestion,
+                  flashcardAnswer:
+                      rawMsg.flashcardAnswer ?? existing?.flashcardAnswer,
+                  quizQuestions:
+                      rawMsg.quizQuestions ?? existing?.quizQuestions,
+                ),
               );
             }
           }
@@ -215,12 +229,14 @@ class ChatRepository {
     required String chatId,
     required String text,
     String? imagePath,
+    ChatToolType? tool,
   }) async {
     final trimmedText = text.trim();
     if (trimmedText.isEmpty && imagePath == null) return;
 
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final localMessageId = 'local_msg_$timestamp';
+    final toolTag = tool?.storageKey;
 
     String? persistentImagePath;
     if (imagePath != null) {
@@ -256,6 +272,7 @@ class ChatRepository {
         imagePath: persistentImagePath,
         timestamp: timestamp,
         synced: false,
+        toolTag: toolTag,
       ),
     );
     _emitMessages(userId, chatId);
@@ -271,6 +288,7 @@ class ChatRepository {
           messageId: localMessageId,
           createdAt: timestamp,
           imagePath: persistentImagePath,
+          toolTag: toolTag,
         ),
       );
       return;
@@ -282,6 +300,7 @@ class ChatRepository {
       text: trimmedText,
       imagePath: persistentImagePath,
       localMessageId: localMessageId,
+      tool: tool,
     );
   }
 
@@ -291,6 +310,7 @@ class ChatRepository {
     required String text,
     String? imagePath,
     required String localMessageId,
+    ChatToolType? tool,
   }) async {
     var resolvedChatId = chatId;
     String initialText = text;
@@ -338,6 +358,8 @@ class ChatRepository {
       } catch (_) {}
     }
 
+    final toolTag = tool?.storageKey;
+
     final msgRef = _database
         .ref('users/$userId/chats/$resolvedChatId/messages')
         .push();
@@ -346,6 +368,7 @@ class ChatRepository {
       'text': initialText,
       'imagePath': base64File,
       'timestamp': ServerValue.timestamp,
+      if (toolTag != null) 'toolTag': toolTag,
     });
 
     // When the message is confirmed by Firebase, update Hive with the real
@@ -360,6 +383,7 @@ class ChatRepository {
         imagePath: imagePath, // local file path — not base64
         timestamp: DateTime.now().millisecondsSinceEpoch,
         synced: true,
+        toolTag: toolTag,
       ),
     );
     // Remove the old local-id entry.
@@ -369,15 +393,62 @@ class ChatRepository {
     }
 
     final File? fileToQuery = imagePath != null ? File(imagePath) : null;
-    final aiResponse = await _gemini.query(initialText, attachmentFile: fileToQuery);
+
+    String aiResponseText;
+    String? flashcardQuestion;
+    String? flashcardAnswer;
+    List<QuizQuestion>? quizQuestions;
+
+    if (tool == ChatToolType.generateFlashcard) {
+      final flashcard = await _gemini.generateFlashcard(
+        initialText,
+        attachmentFile: fileToQuery,
+      );
+      flashcardQuestion = flashcard.question;
+      flashcardAnswer = flashcard.answer;
+      aiResponseText = 'Flashcard ready';
+    } else if (tool == ChatToolType.generateQuiz) {
+      // ✅ generateQuiz() use karo (raw query() nahi) — ye Gemini ke JSON
+      // response ko parse karke List<QuizQuestion> deta hai, jise neeche
+      // Firebase + Hive dono mein save karna zaroori hai. Pehle yahan
+      // sirf raw unparsed JSON text aiResponseText mein store ho raha tha
+      // aur quizQuestions kabhi set nahi hota tha — isi wajah se UI quiz
+      // widget null quizQuestions ke saath crash karta tha.
+      quizQuestions = await _gemini.generateQuiz(
+        initialText,
+        attachmentFile: fileToQuery,
+      );
+      aiResponseText = 'Quiz ready';
+    } else {
+      aiResponseText = await _gemini.query(
+        initialText,
+        attachmentFile: fileToQuery,
+      );
+    }
+
     final aiMsgRef = _database
         .ref('users/$userId/chats/$resolvedChatId/messages')
         .push();
 
     await aiMsgRef.set({
       'sender': 'ai',
-      'text': aiResponse,
+      'text': aiResponseText,
       'timestamp': ServerValue.timestamp,
+      if (toolTag != null) 'toolTag': toolTag,
+      if (flashcardQuestion != null) 'flashcardQuestion': flashcardQuestion,
+      if (flashcardAnswer != null) 'flashcardAnswer': flashcardAnswer,
+      if (quizQuestions != null && quizQuestions.isNotEmpty)
+        'quizQuestions': jsonEncode(
+          quizQuestions
+              .map(
+                (q) => {
+                  'question': q.question,
+                  'options': q.options,
+                  'correctIndex': q.correctIndex,
+                },
+              )
+              .toList(),
+        ),
     });
 
     await _hive.saveMessage(
@@ -386,8 +457,12 @@ class ChatRepository {
         chatId: resolvedChatId,
         userId: userId,
         sender: 'ai',
-        text: aiResponse,
+        text: aiResponseText,
         timestamp: DateTime.now().millisecondsSinceEpoch,
+        toolTag: toolTag,
+        flashcardQuestion: flashcardQuestion,
+        flashcardAnswer: flashcardAnswer,
+        quizQuestions: quizQuestions,
       ),
     );
 
@@ -479,6 +554,7 @@ class ChatRepository {
             text: item.messageText!,
             imagePath: item.imagePath,
             localMessageId: item.messageId!,
+            tool: ChatToolTypeX.fromStorageKey(item.toolTag),
           );
           await _hive.removePendingSync(item.id);
         }
@@ -490,7 +566,10 @@ class ChatRepository {
 
   void dispose() {
     _chatsSubscription?.cancel();
-    _messagesSubscription?.cancel();
+    for (final s in _messagesSubscriptions.values) {
+      s.cancel();
+    }
+
     _connectivitySubscription?.cancel();
     _chatsController.close();
     for (final controller in _messageControllers.values) {

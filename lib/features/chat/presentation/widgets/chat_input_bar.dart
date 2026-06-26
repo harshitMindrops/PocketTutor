@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:pocket_tutor/app/theme/app_colors.dart';
+import 'package:pocket_tutor/features/chat/data/models/chat_tool_type.dart';
+import 'package:pocket_tutor/features/chat/presentation/widgets/chat_tool_tag.dart';
 
 class ChatInputBar extends StatefulWidget {
   const ChatInputBar({
     super.key,
     required this.controller,
     required this.onSend,
-    required this.onAttachPick,
+    required this.onAddPick,
     required this.onVoiceRecord,
+    this.selectedTool,
+    this.onClearTool,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onSend;
-  final VoidCallback onAttachPick;
+  final VoidCallback onAddPick;
   final VoidCallback onVoiceRecord;
+  final ChatToolType? selectedTool;
+  final VoidCallback? onClearTool;
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
@@ -70,97 +76,116 @@ class _ChatInputBarState extends State<ChatInputBar>
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Attach button
-            _CircleIconBtn(
-              icon: Icons.attach_file_rounded,
-              color: AppColors.primaryLight,
-              onTap: widget.onAttachPick,
-            ),
-            const SizedBox(width: 8),
-
-            // Text field pill
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: _hasText
-                        ? AppColors.primaryLight.withValues(alpha: 0.5)
-                        : AppColors.glassBorder,
-                  ),
-                  boxShadow: _hasText
-                      ? [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            blurRadius: 12,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: TextField(
-                  controller: widget.controller,
-                  maxLines: 5,
-                  minLines: 1,
-                  style: const TextStyle(color: AppColors.onPrimary, fontSize: 15),
-                  decoration: const InputDecoration(
-                    hintText: 'Ask anything... ✨',
-                    hintStyle: TextStyle(color: AppColors.onSurfaceHint),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 13),
-                  ),
-                  onSubmitted: widget.onSend,
+            if (widget.selectedTool != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                child: ChatToolTag(
+                  tool: widget.selectedTool!,
+                  onRemove: widget.onClearTool,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
+            ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Add button (+)
+                _CircleIconBtn(
+                  icon: Icons.add_rounded,
+                  color: AppColors.primaryLight,
+                  onTap: widget.onAddPick,
+                ),
+                const SizedBox(width: 8),
 
-            // Mic button
-            _CircleIconBtn(
-              icon: Icons.mic_none_rounded,
-              color: AppColors.secondary,
-              onTap: widget.onVoiceRecord,
-            ),
-            const SizedBox(width: 8),
-
-            // Send button with scale animation
-            ScaleTransition(
-              scale: _sendBtnScale,
-              child: GestureDetector(
-                onTap: _handleSend,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: _hasText
-                        ? AppColors.userBubbleGradient
-                        : const LinearGradient(
-                            colors: [Color(0xFF2A2A50), Color(0xFF2A2A50)],
-                          ),
-                    boxShadow: _hasText
-                        ? [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.45),
-                              blurRadius: 14,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: const Icon(
-                    Icons.send_rounded,
-                    color: Colors.white,
-                    size: 20,
+                // Text field pill
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: _hasText
+                            ? AppColors.primaryLight.withValues(alpha: 0.5)
+                            : AppColors.glassBorder,
+                      ),
+                      boxShadow: _hasText
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.12),
+                                blurRadius: 12,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: TextField(
+                      controller: widget.controller,
+                      maxLines: 5,
+                      minLines: 1,
+                      style: const TextStyle(color: AppColors.onPrimary, fontSize: 15),
+                      decoration: InputDecoration(
+                        hintText: widget.selectedTool == ChatToolType.generateFlashcard
+                            ? 'Topic for flashcard...'
+                            : widget.selectedTool == ChatToolType.generateQuiz
+                                ? 'Topic for quiz...'
+                                : 'Ask anything... ✨',
+                        hintStyle: const TextStyle(color: AppColors.onSurfaceHint),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      onSubmitted: widget.onSend,
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+
+                // Mic button
+                _CircleIconBtn(
+                  icon: Icons.mic_none_rounded,
+                  color: AppColors.secondary,
+                  onTap: widget.onVoiceRecord,
+                ),
+                const SizedBox(width: 8),
+
+                // Send button with scale animation
+                ScaleTransition(
+                  scale: _sendBtnScale,
+                  child: GestureDetector(
+                    onTap: _handleSend,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: _hasText
+                            ? AppColors.userBubbleGradient
+                            : const LinearGradient(
+                                colors: [Color(0xFF2A2A50), Color(0xFF2A2A50)],
+                              ),
+                        boxShadow: _hasText
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.45),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: const Icon(
+                        Icons.send_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

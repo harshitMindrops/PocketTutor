@@ -9,6 +9,7 @@ class PendingSyncItem {
   final String? messageId;
   final int createdAt;
   final String? imagePath;
+  final String? toolTag;
 
   const PendingSyncItem({
     required this.id,
@@ -19,5 +20,6 @@ class PendingSyncItem {
     this.messageId,
     required this.createdAt,
     this.imagePath,
+    this.toolTag,
   });
 }

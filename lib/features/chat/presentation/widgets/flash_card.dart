@@ -19,6 +19,8 @@ class FlashCard extends StatefulWidget {
 
 class _FlashCardState extends State<FlashCard>
     with SingleTickerProviderStateMixin {
+  static const _cardHeight = 280.0;
+
   late AnimationController _ctrl;
   late Animation<double> _anim;
   bool _isFlipped = false;
@@ -52,38 +54,40 @@ class _FlashCardState extends State<FlashCard>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _flip,
-      child: AnimatedBuilder(
-        animation: _anim,
-        builder: (context, child) {
-          // 0.0 - 0.5 → front visible, 0.5 - 1.0 → back visible
-          final showBack = _anim.value >= 0.5;
-          final angle = _anim.value * pi;
+    return SizedBox(
+      height: _cardHeight,
+      width: double.infinity,
+      child: GestureDetector(
+        onTap: _flip,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedBuilder(
+          animation: _anim,
+          builder: (context, child) {
+            final showBack = _anim.value >= 0.5;
+            final angle = _anim.value * pi;
 
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.001) // perspective
-              ..rotateY(angle),
-            child: showBack
-                ? Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()..rotateY(pi),
-                    child: _BackFace(
-                      explanation: widget.explanation,
-                      detailedReview: widget.detailedReview,
-                    ),
-                  )
-                : _FrontFace(question: widget.question),
-          );
-        },
+            return Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.001)
+                ..rotateY(angle),
+              child: showBack
+                  ? Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()..rotateY(pi),
+                      child: _BackFace(
+                        explanation: widget.explanation,
+                        detailedReview: widget.detailedReview,
+                      ),
+                    )
+                  : _FrontFace(question: widget.question),
+            );
+          },
+        ),
       ),
     );
   }
 }
-
-// ─── Front Face ──────────────────────────────────────────────────────────────
 
 class _FrontFace extends StatelessWidget {
   final String question;
@@ -92,16 +96,15 @@ class _FrontFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 320),
-      padding: const EdgeInsets.all(24),
+      height: _FlashCardState._cardHeight,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF151C2E),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white10),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -110,9 +113,8 @@ class _FrontFace extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Tag
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.help_outline_rounded,
                   color: Color(0xFF7C5CFC), size: 14),
               SizedBox(width: 6),
@@ -127,32 +129,31 @@ class _FrontFace extends StatelessWidget {
               ),
             ],
           ),
-
-          const Spacer(),
-
-          // Question text
-          Text(
-            question,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              height: 1.5,
+          const SizedBox(height: 16),
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                child: Text(
+                  question,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                  ),
+                ),
+              ),
             ),
           ),
-
-          const Spacer(),
-
-          // Tap to flip
-          Column(
-            children: const [
+          const Column(
+            children: [
               Icon(Icons.flip_camera_android_rounded,
-                  color: Colors.white38, size: 22),
-              SizedBox(height: 6),
+                  color: Colors.white38, size: 20),
+              SizedBox(height: 4),
               Text(
                 'Tap to flip',
-                style: TextStyle(color: Colors.white38, fontSize: 12),
+                style: TextStyle(color: Colors.white38, fontSize: 11),
               ),
             ],
           ),
@@ -161,8 +162,6 @@ class _FrontFace extends StatelessWidget {
     );
   }
 }
-
-// ─── Back Face ───────────────────────────────────────────────────────────────
 
 class _BackFace extends StatefulWidget {
   final String explanation;
@@ -179,16 +178,15 @@ class _BackFaceState extends State<_BackFace> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 320),
-      padding: const EdgeInsets.all(24),
+      height: _FlashCardState._cardHeight,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF151C2E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF7C5CFC).withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFF7C5CFC).withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7C5CFC).withOpacity(0.15),
+            color: const Color(0xFF7C5CFC).withValues(alpha: 0.15),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -197,9 +195,8 @@ class _BackFaceState extends State<_BackFace> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Tag
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.auto_awesome, color: Color(0xFF7C5CFC), size: 14),
               SizedBox(width: 6),
               Text(
@@ -213,17 +210,14 @@ class _BackFaceState extends State<_BackFace> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-
-          // Explanation with bold highlights
-          _HighlightedText(text: widget.explanation),
-
-          const SizedBox(height: 20),
-
-          // Detailed Review accordion
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              child: _HighlightedText(text: widget.explanation),
+            ),
+          ),
           if (widget.detailedReview != null) ...[
-            const Divider(color: Colors.white10),
-            const SizedBox(height: 8),
+            const Divider(color: Colors.white10, height: 16),
             GestureDetector(
               onTap: () =>
                   setState(() => _reviewExpanded = !_reviewExpanded),
@@ -252,7 +246,7 @@ class _BackFaceState extends State<_BackFace> {
               curve: Curves.easeInOut,
               child: _reviewExpanded
                   ? Padding(
-                      padding: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Text(
                         widget.detailedReview!,
                         style: const TextStyle(
@@ -271,15 +265,12 @@ class _BackFaceState extends State<_BackFace> {
   }
 }
 
-// ─── Highlighted Text (bold keywords) ────────────────────────────────────────
-
 class _HighlightedText extends StatelessWidget {
   final String text;
   const _HighlightedText({required this.text});
 
   @override
   Widget build(BuildContext context) {
-    // Bold words wrapped in **word**
     final parts = text.split(RegExp(r'(\*\*.*?\*\*)'));
     final spans = parts.map((part) {
       if (part.startsWith('**') && part.endsWith('**')) {

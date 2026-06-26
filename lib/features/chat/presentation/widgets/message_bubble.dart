@@ -1,10 +1,19 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+// ✅ Sirf ek import — duplicate line 5 wala hata diya
+import 'package:pocket_tutor/features/chat/presentation/widgets/quiz.dart'
+    show QuizWidget, QuizQuestion;
+
 import 'package:pocket_tutor/app/theme/app_colors.dart';
+import 'package:pocket_tutor/features/chat/data/models/chat_tool_type.dart';
+import 'package:pocket_tutor/features/chat/presentation/widgets/chat_tool_tag.dart';
+import 'package:pocket_tutor/features/chat/presentation/widgets/flash_card.dart';
+
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
+import 'dart:convert';
 
 class MessageBubble extends StatefulWidget {
   const MessageBubble({
@@ -15,6 +24,10 @@ class MessageBubble extends StatefulWidget {
     this.messageId,
     this.currentlySpeakingId,
     this.onSpeakToggled,
+    this.toolTag,
+    this.flashcardQuestion,
+    this.flashcardAnswer,
+    this.quizQuestions, // ✅ naya parameter
   });
 
   final String text;
@@ -23,6 +36,10 @@ class MessageBubble extends StatefulWidget {
   final String? messageId;
   final String? currentlySpeakingId;
   final VoidCallback? onSpeakToggled;
+  final String? toolTag;
+  final String? flashcardQuestion;
+  final String? flashcardAnswer;
+  final List<QuizQuestion>? quizQuestions; // ✅ naya field
 
   @override
   State<MessageBubble> createState() => _MessageBubbleState();
@@ -99,60 +116,212 @@ class _MessageBubbleState extends State<MessageBubble>
 
   @override
   Widget build(BuildContext context) {
-    final isSpeaking =
-        widget.messageId != null && widget.currentlySpeakingId == widget.messageId;
+    final isSpeaking = widget.messageId != null &&
+        widget.currentlySpeakingId == widget.messageId;
     final isUser = widget.isUser;
+    final hasFlashcard = _hasFlashcard;
+
+    // ✅ Quiz check sabse pehle — agar quiz hai toh seedha quiz widget return karo
+    if (_hasQuiz) {
+      return _buildQuizFromText(context);
+    }
+
+    final bubble = Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width *
+              (hasFlashcard ? 0.92 : 0.78),
+        ),
+        child: hasFlashcard
+            ? _buildFlashcardMessage(context)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!isUser) _aiAvatar(),
+                  Flexible(
+                    child: _buildBubble(context, isUser, isSpeaking),
+                  ),
+                ],
+              ),
+      ),
+    );
 
     return FadeTransition(
       opacity: _fade,
       child: ScaleTransition(
         scale: _scale,
         alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-        child: Align(
-          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // AI avatar — left side
-                if (!isUser) ...[
-                  Container(
-                    width: 30,
-                    height: 30,
-                    margin: const EdgeInsets.only(right: 8, bottom: 2),
-                    decoration: const BoxDecoration(
-                      gradient: AppColors.heroGradient,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-
-                // Bubble
-                Flexible(
-                  child: _buildBubble(context, isUser, isSpeaking),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: bubble,
       ),
     );
   }
 
+  bool get _hasFlashcard =>
+      !widget.isUser &&
+      widget.flashcardQuestion != null &&
+      widget.flashcardQuestion!.trim().isNotEmpty &&
+      widget.flashcardAnswer != null &&
+      widget.flashcardAnswer!.trim().isNotEmpty;
+
+  bool get _hasQuiz =>
+      !widget.isUser &&
+      ChatToolTypeX.fromStorageKey(widget.toolTag) ==
+          ChatToolType.generateQuiz;
+
+  // ✅ Fully fixed — dynamic questions use karta hai
+  Widget _buildQuizFromText(BuildContext context) {
+    // quizQuestions directly pass hue hain toh use karo
+    List<QuizQuestion> questions = widget.quizQuestions ?? [];
+
+    // Fallback: agar questions nahi aaye toh text se JSON parse karne ki koshish
+    if (questions.isEmpty && widget.text.trim().isNotEmpty) {
+      try {
+        var cleaned = widget.text.trim();
+        if (cleaned.startsWith('```')) {
+          cleaned = cleaned.replaceFirst(RegExp(r'^```(?:json)?\s*'), '');
+          cleaned = cleaned.replaceFirst(RegExp(r'\s*```$'), '');
+          cleaned = cleaned.trim();
+        }
+        final decoded = jsonDecode(cleaned);
+        if (decoded is List) {
+          questions = decoded.map((item) {
+            final m = item as Map<String, dynamic>;
+            final opts = (m['options'] as List?)
+                    ?.map((e) => e.toString())
+                    .toList() ??
+                [];
+            while (opts.length < 4) {
+              opts.add('Option ${opts.length + 1}');
+            }
+            return QuizQuestion(
+              question: m['question']?.toString() ?? '',
+              options: opts.take(4).toList(),
+              correctIndex:
+                  int.tryParse(m['correctAnswerIndex'].toString()) ?? 0,
+            );
+          }).toList();
+        }
+      } catch (_) {
+        // parse nahi hua — empty list rahegi
+      }
+    }
+
+    // Questions nahi hain — error state dikhao
+    if (questions.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.primaryLight.withValues(alpha: 0.15),
+          ),
+        ),
+        child: Row(
+          children: [
+            _aiAvatar(),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Quiz load nahi hua. Dobara try karo.',
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ✅ QuizWidget ko real questions ke saath render karo
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      alignment: Alignment.centerLeft,
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.92,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+          border: Border.all(
+            color: AppColors.primaryLight.withValues(alpha: 0.15),
+          ),
+        ),
+        child: QuizWidget(questions: questions), // ✅ dynamic questions
+      ),
+    );
+  }
+
+  Widget _aiAvatar() {
+    return Container(
+      width: 30,
+      height: 30,
+      margin: const EdgeInsets.only(right: 8, bottom: 2),
+      decoration: const BoxDecoration(
+        gradient: AppColors.heroGradient,
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.auto_awesome, size: 14, color: Colors.white),
+    );
+  }
+
+  Widget _buildFlashcardMessage(BuildContext context) {
+    final tool = ChatToolTypeX.fromStorageKey(widget.toolTag);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _aiAvatar(),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(20),
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                  border: Border.all(
+                    color: AppColors.primaryLight.withValues(alpha: 0.15),
+                  ),
+                ),
+                child: FlashCard(
+                  question: widget.flashcardQuestion!.trim(),
+                  explanation: widget.flashcardAnswer!.trim(),
+                ),
+              ),
+              if (tool != null) ...[
+                const SizedBox(height: 8),
+                ChatToolTag(tool: tool, compact: true),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBubble(BuildContext context, bool isUser, bool isSpeaking) {
+    const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+
     if (isUser) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: padding,
         decoration: BoxDecoration(
           gradient: AppColors.userBubbleGradient,
           borderRadius: const BorderRadius.only(
@@ -173,7 +342,7 @@ class _MessageBubbleState extends State<MessageBubble>
       );
     } else {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: padding,
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: const BorderRadius.only(
@@ -199,16 +368,16 @@ class _MessageBubbleState extends State<MessageBubble>
   }
 
   Widget _bubbleContent(BuildContext context, bool isUser, bool isSpeaking) {
+    final tool = ChatToolTypeX.fromStorageKey(widget.toolTag);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Attachment preview
         if (widget.imagePath != null && widget.imagePath!.isNotEmpty) ...[
           _buildAttachmentWidget(context, widget.imagePath!),
           const SizedBox(height: 8),
         ],
-        // Text + action row
         Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -217,9 +386,7 @@ class _MessageBubbleState extends State<MessageBubble>
               child: SelectableText(
                 widget.text,
                 style: TextStyle(
-                  color: isUser
-                      ? Colors.white
-                      : AppColors.onSurface,
+                  color: isUser ? Colors.white : AppColors.onSurface,
                   fontSize: 15,
                   height: 1.5,
                 ),
@@ -279,6 +446,10 @@ class _MessageBubbleState extends State<MessageBubble>
             ],
           ],
         ),
+        if (tool != null) ...[
+          const SizedBox(height: 8),
+          ChatToolTag(tool: tool, compact: true),
+        ],
       ],
     );
   }
@@ -316,7 +487,8 @@ class _MessageBubbleState extends State<MessageBubble>
       }
     }
 
-    final isImage = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].contains(extension);
+    final isImage =
+        ['.jpg', '.jpeg', '.png', '.webp', '.gif'].contains(extension);
 
     if (isImage) {
       return ClipRRect(
@@ -325,7 +497,6 @@ class _MessageBubbleState extends State<MessageBubble>
       );
     }
 
-    // Document card
     IconData iconData = Icons.insert_drive_file_rounded;
     Color iconColor = AppColors.onSurfaceMuted;
     Color iconBg = AppColors.surfaceMuted;
@@ -353,7 +524,8 @@ class _MessageBubbleState extends State<MessageBubble>
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: iconBg, borderRadius: BorderRadius.circular(10)),
             child: Icon(iconData, color: iconColor, size: 22),
           ),
           const SizedBox(width: 12),
@@ -392,7 +564,8 @@ class _MessageBubbleState extends State<MessageBubble>
                   }
                 }
               },
-              child: Icon(Icons.open_in_new_rounded, color: iconColor, size: 18),
+              child: Icon(Icons.open_in_new_rounded,
+                  color: iconColor, size: 18),
             ),
           ],
         ],

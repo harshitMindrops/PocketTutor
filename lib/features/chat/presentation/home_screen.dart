@@ -15,6 +15,7 @@ import 'package:pocket_tutor/core/services/tts_service.dart';
 import 'package:pocket_tutor/features/auth/data/auth_repository.dart';
 import 'package:pocket_tutor/features/chat/data/chat_repository.dart';
 import 'package:pocket_tutor/features/chat/data/models/chat_model.dart';
+import 'package:pocket_tutor/features/chat/data/models/chat_tool_type.dart';
 import 'package:pocket_tutor/features/chat/data/models/message_model.dart';
 import 'package:pocket_tutor/features/chat/presentation/widgets/chat_drawer.dart';
 import 'package:pocket_tutor/features/chat/presentation/widgets/chat_empty_state.dart';
@@ -55,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isOnline = true;
 
   File? _selectedFile;
+  ChatToolType? _selectedTool;
   final SpeechToText _speechToText = SpeechToText();
   String? _currentlySpeakingMessageId;
   bool _shouldSpeakNextResponse = false;
@@ -171,11 +173,14 @@ class _HomeScreenState extends State<HomeScreen> {
         _shouldSpeakNextResponse = false;
         TtsService.instance.currentlySpeakingId = lastMsg.id;
         TtsService.instance.onSpeakStateChanged?.call(lastMsg.id);
-        TtsService.instance.speak(lastMsg.text);
+        final speakText = lastMsg.hasFlashcard
+            ? lastMsg.flashcardQuestion!
+            : lastMsg.text;
+        TtsService.instance.speak(speakText);
       }
 
       setState(() => _messages = messages);
-      _scrollToBottom();
+      if (_messages.isNotEmpty) _scrollToBottom();
     });
   }
 
@@ -191,7 +196,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     switch (widget.launchAction) {
       case ChatLaunchAction.attachment:
-        _pickAttachment();
+        _showAddMenu(openAttachment: true);
+      case ChatLaunchAction.flashcard:
+        setState(() => _selectedTool = ChatToolType.generateFlashcard);
+      case ChatLaunchAction.quiz:
+        setState(() => _selectedTool = ChatToolType.generateQuiz);
       case ChatLaunchAction.voice:
         _startVoiceInput();
       case ChatLaunchAction.openDrawer:
@@ -242,8 +251,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isSending = true);
     _messageController.clear();
     final String? imagePath = _selectedFile?.path;
+    final selectedTool = _selectedTool;
     setState(() {
       _selectedFile = null;
+      _selectedTool = null;
     });
 
     try {
@@ -265,6 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
         chatId: chatId,
         text: text.trim(),
         imagePath: imagePath,
+        tool: selectedTool,
       );
 
       if (!_isOnline && mounted) {
@@ -290,8 +302,165 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _pickAttachment() async {
+  Future<void> _showAddMenu({bool openAttachment = false}) async {
+    if (openAttachment) {
+      await _pickAttachment();
+      return;
+    }
+
+    final action = await showModalBottomSheet<_AddMenuAction>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Add',
+                style: TextStyle(
+                  color: AppColors.onPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+                  child: Text(
+                    'Add Tool',
+                    style: TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+              _AttachOption(
+                emoji: '📝',
+                label: 'Generate Quiz',
+                color: AppColors.primary,
+                onTap: () => Navigator.pop(context, _AddMenuAction.quiz),
+              ),
+              _AttachOption(
+                emoji: '🃏',
+                label: 'Generate Flash Card',
+                color: const Color(0xFF4A90D9),
+                onTap: () => Navigator.pop(context, _AddMenuAction.flashcard),
+              ),
+              const Divider(color: AppColors.glassBorder, height: 24),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: Text(
+                    'Add Attachment',
+                    style: TextStyle(
+                      color: AppColors.onSurfaceMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ),
+              _AttachOption(
+                emoji: '📷',
+                label: 'Take a Photo',
+                color: AppColors.primary,
+                onTap: () => Navigator.pop(context, _AddMenuAction.camera),
+              ),
+              _AttachOption(
+                emoji: '🖼️',
+                label: 'Choose from Gallery',
+                color: AppColors.secondary,
+                onTap: () => Navigator.pop(context, _AddMenuAction.gallery),
+              ),
+              _AttachOption(
+                emoji: '📄',
+                label: 'Choose Document (PDF / Word)',
+                color: AppColors.offline,
+                onTap: () => Navigator.pop(context, _AddMenuAction.document),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case _AddMenuAction.quiz:
+        setState(() => _selectedTool = ChatToolType.generateQuiz);
+      case _AddMenuAction.flashcard:
+        setState(() => _selectedTool = ChatToolType.generateFlashcard);
+      case _AddMenuAction.camera:
+        await _pickAttachment(source: ImageSource.camera);
+      case _AddMenuAction.gallery:
+        await _pickAttachment(source: ImageSource.gallery);
+      case _AddMenuAction.document:
+        await _pickAttachment(pickDocument: true);
+    }
+  }
+
+  Future<void> _pickAttachment({
+    ImageSource? source,
+    bool pickDocument = false,
+  }) async {
     final picker = ImagePicker();
+
+    if (pickDocument) {
+      try {
+        final pickerResult = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['pdf', 'docx', 'doc'],
+        );
+        if (pickerResult?.files.single.path != null) {
+          await _applyPickedFile(File(pickerResult!.files.single.path!));
+        }
+      } catch (e) {
+        debugPrint('Error picking file: $e');
+      }
+      return;
+    }
+
+    if (source != null) {
+      final img = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 70,
+      );
+      if (img != null) {
+        setState(() => _selectedFile = File(img.path));
+      }
+      return;
+    }
+
     final result = await showModalBottomSheet<dynamic>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -387,30 +556,33 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } else if (result is FilePickerResult) {
       if (result.files.single.path != null) {
-        final pickedFile = File(result.files.single.path!);
-        try {
-          final size = await pickedFile.length();
-          if (size > 5 * 1024 * 1024) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'File size stands more than 5MB. Please choose a smaller file to save tokens.',
-                  ),
-                  backgroundColor: AppColors.error,
-                ),
-              );
-            }
-            return;
-          }
-        } catch (e) {
-          debugPrint('Error checking file size: $e');
-        }
-        setState(() {
-          _selectedFile = pickedFile;
-        });
+        await _applyPickedFile(File(result.files.single.path!));
       }
     }
+  }
+
+  Future<void> _applyPickedFile(File pickedFile) async {
+    try {
+      final size = await pickedFile.length();
+      if (size > 5 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'File size stands more than 5MB. Please choose a smaller file to save tokens.',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error checking file size: $e');
+    }
+    setState(() {
+      _selectedFile = pickedFile;
+    });
   }
 
   void _startVoiceInput() async {
@@ -723,6 +895,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           imagePath: message.imagePath,
                           messageId: message.id,
                           currentlySpeakingId: _currentlySpeakingMessageId,
+                          toolTag: message.toolTag,
+                          flashcardQuestion: message.flashcardQuestion,
+                          flashcardAnswer: message.flashcardAnswer,
+                          quizQuestions: message.quizQuestions,
                           onSpeakToggled: message.sender == 'ai'
                               ? () {
                                   if (isSpeaking) {
@@ -790,8 +966,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ChatInputBar(
               controller: _messageController,
               onSend: _sendMessage,
-              onAttachPick: _pickAttachment,
+              onAddPick: _showAddMenu,
               onVoiceRecord: _startVoiceInput,
+              selectedTool: _selectedTool,
+              onClearTool: () => setState(() => _selectedTool = null),
             ),
           ],
         ),
@@ -830,6 +1008,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+// ── Helper: Add menu actions ──────────────────────────────────────────────────
+enum _AddMenuAction { quiz, flashcard, camera, gallery, document }
 
 // ── Helper: AppBar icon button ────────────────────────────────────────────────
 class _AppBarBtn extends StatefulWidget {
